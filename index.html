@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pokemon Draft Battle</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Toast notification -->
+  <div id="toast" class="toast" aria-live="polite"></div>
+
+  <!-- ═══════════════════════════════════════════════════════ DRAFT SCREEN -->
+  <div id="draft-screen" class="screen active">
+
+    <header class="draft-header">
+      <div class="header-left">
+        <h1>⚔️ Pokemon Draft Battle</h1>
+        <span class="header-sub">Kanto · 151 Pokemon · $100 Budget</span>
+      </div>
+      <div class="draft-order" title="Snake draft order">
+        <span class="draft-pip player" title="Your pick">🔵</span>
+        <span class="draft-pip ai"     title="AI pick">🔴</span>
+        <span class="draft-pip player">🔵</span>
+        <span class="draft-pip ai">🔴</span>
+        <span class="draft-pip player">🔵</span>
+        <span class="draft-pip ai">🔴</span>
+        <span class="draft-pip player">🔵</span>
+        <span class="draft-pip ai">🔴</span>
+        <span class="draft-pip player">🔵</span>
+        <span class="draft-pip ai">🔴</span>
+      </div>
+    </header>
+
+    <div class="draft-layout">
+
+      <!-- LEFT: Pokemon grid -->
+      <div class="grid-section">
+        <div class="filter-bar">
+          <select id="filter-type" aria-label="Filter by type">
+            <option value="">All Types</option>
+          </select>
+          <select id="filter-tier" aria-label="Filter by tier">
+            <option value="">All Tiers</option>
+            <option value="S">⭐ S Tier — $30</option>
+            <option value="A">🟣 A Tier — $20</option>
+            <option value="B">🔵 B Tier — $12</option>
+            <option value="C">⬜ C Tier — $5</option>
+          </select>
+          <input type="text" id="filter-search" placeholder="🔍  Search Pokemon…" autocomplete="off" spellcheck="false">
+          <span id="grid-count" class="grid-count"></span>
+        </div>
+
+        <div id="pokemon-grid">
+          <!-- Cards injected by draft.js -->
+        </div>
+      </div>
+
+      <!-- RIGHT: Team sidebar -->
+      <aside class="team-sidebar">
+        <div class="sidebar-header">
+          <span class="sidebar-title">MY TEAM</span>
+          <span id="team-count" class="team-count-badge">0 / 5</span>
+        </div>
+
+        <div id="team-slots">
+          <!-- Slots injected by draft.js -->
+        </div>
+
+        <div class="budget-card">
+          <div class="budget-row">
+            <span class="budget-label">BUDGET</span>
+            <span id="budget-display" class="budget-amount">$0 / $100</span>
+          </div>
+          <div class="budget-track">
+            <div id="budget-fill" class="budget-fill" style="width:0%"></div>
+          </div>
+          <div id="budget-remaining" class="budget-remaining">$100 remaining</div>
+        </div>
+
+        <button id="lock-btn" class="lock-btn" disabled>
+          🔒 Lock In Team
+        </button>
+      </aside>
+
+    </div>
+  </div><!-- /draft-screen -->
+
+  <!-- ════════════════════════════════════════════════════════ BATTLE SCREEN -->
+  <div id="battle-screen" class="screen">
+    <div class="battle-placeholder">
+      <div class="bp-icon">⚔️</div>
+      <div class="bp-title">Battle Phase</div>
+      <div class="bp-sub">Coming in Session 2</div>
+    </div>
+  </div>
+
+  <script src="js/pokemon.js"></script>
+  <script src="js/battle.js"></script>
+  <script src="js/draft.js"></script>
+</body>
+</html>
