@@ -52,6 +52,22 @@ const ITEMS = [
 
 const AI_DEFAULT_ITEMS = ['potion', 'fullheal', 'revive'];
 
+const EFFECT_DESC = {
+  burn:      '30% burn (−20 HP/turn)',
+  paralysis: '30% paralyze (skip attack)',
+  sleep:     '30% sleep (can\'t attack)',
+  poison:    '30% poison (−10 HP/turn)',
+  leech:     'Seeds foe (−20/turn, +10 heal)',
+  recoil:    'User takes 25% recoil',
+  heal:      'Heals user 30 HP',
+  splash:    'Does nothing',
+  harden:    'Defensive stance',
+  transform: 'Copies opponent',
+  random:    'Random effect',
+  superfang: 'Halves foe HP',
+  flail:     'Power ↑ at low HP',
+};
+
 // ═══════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════
@@ -149,6 +165,17 @@ function renderGrid() {
 
   grid.querySelectorAll('.pokemon-card').forEach(el => {
     el.addEventListener('click', () => handleCardClick(parseInt(el.dataset.id, 10)));
+  });
+
+  // Tooltip hover
+  grid.querySelectorAll('.pokemon-card').forEach(el => {
+    const id = parseInt(el.dataset.id, 10);
+    const p  = window.getPokemonById(id);
+    if (!p) return;
+
+    el.addEventListener('mouseenter', evt => showCardTooltip(p, evt));
+    el.addEventListener('mousemove',  evt => positionTooltip(evt));
+    el.addEventListener('mouseleave', hideCardTooltip);
   });
 }
 
@@ -620,6 +647,109 @@ function setupLockBtn() {
     if (state.team.length !== MAX_TEAM_SIZE || state.phase !== 'draft') return;
     startAiDraft();
   });
+
+  // Suggest Team button
+  const sidebar = document.querySelector('.team-sidebar');
+  if (sidebar) {
+    const suggestBtn = document.createElement('button');
+    suggestBtn.className = 'suggest-btn';
+    suggestBtn.textContent = '✨ Suggest Random Team';
+    suggestBtn.addEventListener('click', suggestTeam);
+    // Insert before the lock button
+    const lockBtn = document.getElementById('lock-btn');
+    sidebar.insertBefore(suggestBtn, lockBtn);
+  }
+
+  // Create tooltip element
+  if (!document.getElementById('poke-tooltip')) {
+    const tt = document.createElement('div');
+    tt.id        = 'poke-tooltip';
+    tt.className = 'poke-tooltip';
+    tt.setAttribute('role', 'tooltip');
+    tt.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(tt);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TOOLTIP
+// ═══════════════════════════════════════════════════════════════
+function showCardTooltip(p, evt) {
+  const tt = document.getElementById('poke-tooltip');
+  if (!tt) return;
+
+  const attacks = p.attacks.map(a => `
+<div class="tt-attack">
+  <span class="tt-atk-name">${a.name}</span>
+  <span class="tt-atk-cost">${'●'.repeat(a.energyCost)}${'○'.repeat(Math.max(0,3-a.energyCost))}</span>
+  <span class="tt-atk-dmg">${a.damage > 0 ? a.damage + ' dmg' : '— (effect)'}</span>
+  ${a.effect ? `<span class="tt-atk-fx">${EFFECT_DESC[a.effect] || a.effect}</span>` : ''}
+</div>`).join('');
+
+  tt.innerHTML = `
+<div class="tt-title"><span>${p.emoji}</span><span>${p.name}</span></div>
+<div class="tt-attacks">${attacks}</div>
+<div class="tt-matchups">
+  ${p.weakness   ? `<div class="tt-weak">⚠️ Weak to: ${p.weakness}</div>`   : ''}
+  ${p.resistance ? `<div class="tt-resist">🛡️ Resists: ${p.resistance}</div>` : ''}
+  ${!p.weakness && !p.resistance ? '<div style="color:var(--text-dim);font-size:0.7rem">No notable matchups</div>' : ''}
+</div>`;
+
+  tt.style.display = 'block';
+  tt.setAttribute('aria-hidden', 'false');
+  positionTooltip(evt);
+}
+
+function positionTooltip(evt) {
+  const tt = document.getElementById('poke-tooltip');
+  if (!tt || tt.style.display === 'none') return;
+  const x   = evt.clientX + 14;
+  const y   = evt.clientY + 14;
+  const w   = tt.offsetWidth  || 240;
+  const h   = tt.offsetHeight || 160;
+  tt.style.left = Math.min(x, window.innerWidth  - w - 16) + 'px';
+  tt.style.top  = Math.min(y, window.innerHeight - h - 16) + 'px';
+}
+
+function hideCardTooltip() {
+  const tt = document.getElementById('poke-tooltip');
+  if (tt) { tt.style.display = 'none'; tt.setAttribute('aria-hidden', 'true'); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SUGGEST TEAM
+// ═══════════════════════════════════════════════════════════════
+function suggestTeam() {
+  if (state.phase !== 'draft') return;
+
+  const pool = window.KANTO_POKEMON.slice();
+  let suggestion = null;
+
+  for (let attempt = 0; attempt < 400; attempt++) {
+    // Fisher-Yates shuffle then take first 5
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const pick = pool.slice(0, 5);
+    const cost = pick.reduce((s, p) => s + p.cost, 0);
+    if (cost <= MAX_BUDGET) { suggestion = pick; break; }
+  }
+
+  if (!suggestion) return;
+
+  // Clear current team
+  state.team   = [];
+  state.budget = 0;
+
+  // Apply suggestion
+  suggestion.forEach(p => {
+    state.team.push(p);
+    state.budget += p.cost;
+  });
+
+  refresh();
+  showToast('✨ Random team suggested! Swap any picks you like.', 'info');
 }
 
 // ═══════════════════════════════════════════════════════════════
