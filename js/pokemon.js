@@ -607,3 +607,25 @@ window.filterByTier = function(tier) {
 window.filterByType = function(type) {
   return window.KANTO_POKEMON.filter(p => p.type1 === type || p.type2 === type);
 };
+
+// ── Sprites ───────────────────────────────────────────────────────────────────
+// Gen-V black/white sprites, bundled under assets/ so the game still runs from
+// a file:// URL with no network. The emoji sits behind the image as a fallback:
+// if the file 404s the <img> removes itself and the emoji shows through.
+//
+//   size:  'card' | 'active' | 'bench' | 'slot' | 'vs' | 'ov' | 'tt'
+//   opts:  { animated } — animated GIFs are reserved for the battle hero slot
+window.spriteHtml = function(p, size, opts) {
+  const o        = opts || {};
+  const id       = p.spriteId || p.id;          // Transform repoints this
+  const animated = !!o.animated;
+  const src      = animated ? `assets/sprites/anim/${id}.gif` : `assets/sprites/${id}.png`;
+  const emoji    = o.emoji || p.emoji;
+  const extra    = o.className ? ' ' + o.className : '';
+
+  return `<span class="sprite-wrap sprite-${size}${extra}" aria-hidden="true">` +
+           `<span class="sprite-fallback">${emoji}</span>` +
+           `<img class="sprite" src="${src}" alt="" loading="lazy" decoding="async" ` +
+                `onerror="this.remove()">` +
+         `</span>`;
+};

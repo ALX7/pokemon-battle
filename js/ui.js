@@ -134,7 +134,10 @@ function buildActiveCard(mon, who, state) {
     <span class="active-name">${mon.name}</span>
     ${mon.status ? `<span class="status-badge status-${mon.status}" role="status">${STATUS_LABEL[mon.status]}</span>` : ''}
   </div>
-  <div class="active-emoji" aria-hidden="true">${mon.emoji}</div>
+  ${window.spriteHtml(mon, 'active', {
+      animated: true,
+      className: who === 'ai' ? 'sprite-facing-front' : 'sprite-facing-back',
+    })}
   <div class="hp-row">
     <div class="hp-track" role="progressbar" aria-valuenow="${mon.currentHp}" aria-valuemax="${mon.hp}" aria-label="HP">
       <div class="hp-fill" style="width:${(hpPct*100).toFixed(1)}%;background:${hpColor(hpPct)}"></div>
@@ -156,14 +159,14 @@ function buildBenchCard(mon, idx, who) {
     return `
 <div class="bench-card bench-fainted${isKo ? ' ko-wrap' : ''}" aria-label="${mon.name}, fainted">
   ${isKo ? '<div class="ko-overlay"><span class="ko-label" style="font-size:1rem">KO!</span></div>' : ''}
-  <span class="bench-emoji" aria-hidden="true">💀</span>
+  ${window.spriteHtml(mon, 'bench', { emoji: '💀', className: 'sprite-ko' })}
   <div class="bench-right"><span class="bench-name">${mon.name}</span></div>
 </div>`;
   }
   const hpPct = mon.currentHp / mon.hp;
   return `
 <div class="bench-card" aria-label="${mon.name}, ${mon.currentHp} HP">
-  <span class="bench-emoji" aria-hidden="true">${mon.emoji}</span>
+  ${window.spriteHtml(mon, 'bench')}
   <div class="bench-right">
     <span class="bench-name">${mon.name}</span>
     <div class="bench-hp-track" role="progressbar" aria-valuenow="${mon.currentHp}" aria-valuemax="${mon.hp}">
@@ -283,7 +286,7 @@ function buildSwitchOverlay(state) {
     return `
 <div class="ov-card" data-switch-to="${i}" tabindex="0" role="button"
      aria-label="${p.name}, ${p.currentHp} of ${p.hp} HP">
-  <div class="ov-emoji" aria-hidden="true">${p.emoji}</div>
+  ${window.spriteHtml(p, 'ov')}
   <div class="ov-name">${p.name}</div>
   <div class="ov-hp-track"><div style="width:${(hpPct*100).toFixed(0)}%;background:${hpColor(hpPct)};height:100%;border-radius:3px"></div></div>
   <div class="ov-hp">${p.currentHp}/${p.hp}</div>
@@ -338,7 +341,7 @@ function buildItemPicker(state) {
 <div class="ov-card" data-item-target="${i}" tabindex="0" role="button"
      aria-label="${p.name}, ${p.currentHp} of ${p.hp} HP${i === activeIx ? ', active' : ''}">
   ${i === activeIx ? '<div class="ov-active-tag">ACTIVE</div>' : ''}
-  <div class="ov-emoji" aria-hidden="true">${p.fainted ? '💀' : p.emoji}</div>
+  ${window.spriteHtml(p, 'ov', p.fainted ? { emoji: '💀', className: 'sprite-ko' } : {})}
   <div class="ov-name">${p.name}</div>
   <div class="ov-hp-track"><div style="width:${(hpPct*100).toFixed(0)}%;background:${hpColor(hpPct)};height:100%;border-radius:3px"></div></div>
   <div class="ov-hp">${p.currentHp}/${p.hp}</div>

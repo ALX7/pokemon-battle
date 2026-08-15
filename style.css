@@ -353,13 +353,97 @@ body {
   color: var(--gold);
 }
 
-.card-emoji {
-  font-size: 3rem;
-  text-align: center;
-  display: block;
-  line-height: 1.1;
-  margin: 6px 0 8px;
-  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5));
+/* ══════════════════════════════════════════════════════════════
+   SPRITES
+   Gen-V pixel art, upscaled with `pixelated` so it stays crisp.
+   The emoji fallback sits behind the image; if the file fails to
+   load the <img> removes itself and the emoji shows through.
+══════════════════════════════════════════════════════════════ */
+.sprite-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sprite-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.sprite {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* Draft grid card */
+.sprite-card {
+  width: 84px;
+  height: 84px;
+  align-self: center;
+  margin: 4px 0 6px;
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.55));
+}
+.sprite-card .sprite-fallback { font-size: 3rem; }
+
+/* Team sidebar slot */
+.sprite-slot { width: 38px; height: 38px; }
+.sprite-slot .sprite-fallback { font-size: 1.5rem; }
+
+/* VS split view */
+.sprite-vs { width: 42px; height: 42px; }
+.sprite-vs .sprite-fallback { font-size: 1.7rem; }
+
+/* Draft tooltip */
+.sprite-tt { width: 32px; height: 32px; }
+.sprite-tt .sprite-fallback { font-size: 1.1rem; }
+
+/* Battle: active Pokemon — the hero slot, animated */
+.sprite-active {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  padding: 2px 0;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.6));
+}
+.sprite-active .sprite {
+  height: 100%;
+  width: auto;
+  max-height: 132px;
+  animation: sprite-idle 3.2s ease-in-out infinite;
+}
+.sprite-active .sprite-fallback { font-size: 3.2rem; }
+
+/* Your own Pokemon reads as nearer the camera */
+.sprite-facing-back .sprite { transform: scale(1.14); }
+
+@keyframes sprite-idle {
+  0%, 100% { translate: 0 0; }
+  50%      { translate: 0 -4px; }
+}
+
+/* Battle bench */
+.sprite-bench { width: 40px; height: 40px; }
+.sprite-bench .sprite-fallback { font-size: 1.4rem; }
+
+/* Switch / item-target overlay */
+.sprite-ov { width: 64px; height: 64px; }
+.sprite-ov .sprite-fallback { font-size: 2.4rem; }
+
+/* Fainted — drained and dimmed */
+.sprite-ko .sprite { filter: grayscale(1) brightness(0.55); opacity: 0.65; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sprite-active .sprite { animation: none; }
 }
 
 .card-name {
@@ -521,14 +605,6 @@ body {
 }
 
 .team-slot.filled:hover { border-color: var(--red); }
-
-.slot-emoji {
-  font-size: 1.6rem;
-  line-height: 1;
-  flex-shrink: 0;
-  width: 34px;
-  text-align: center;
-}
 
 .slot-info { flex: 1; min-width: 0; }
 
@@ -804,13 +880,6 @@ body[data-phase="item_select"] .team-sidebar { display: none; }
 
 .vs-slot-num   { font-size: 0.75rem; color: var(--text-dim); }
 .vs-slot-dots  { font-size: 0.8rem;  color: var(--text-dim); letter-spacing: 2px; }
-
-.vs-card-emoji {
-  font-size: 1.9rem;
-  min-width: 38px;
-  text-align: center;
-  line-height: 1;
-}
 
 .vs-card-info { flex: 1; min-width: 0; }
 
@@ -1133,17 +1202,6 @@ body[data-phase="item_select"] .team-sidebar { display: none; }
   text-overflow: ellipsis;
 }
 
-.active-emoji {
-  font-size: 3.2rem;
-  text-align: center;
-  line-height: 1;
-  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5));
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .hp-row {
   display: flex;
   align-items: center;
@@ -1239,8 +1297,6 @@ body[data-phase="item_select"] .team-sidebar { display: none; }
   opacity: 0.3;
   filter: grayscale(1);
 }
-
-.bench-emoji { font-size: 1.5rem; line-height: 1; flex-shrink: 0; }
 
 .bench-right {
   flex: 1;
@@ -1523,7 +1579,6 @@ body[data-phase="item_select"] .team-sidebar { display: none; }
   box-shadow: 0 8px 24px rgba(255,215,0,0.2);
 }
 
-.ov-emoji  { font-size: 2.4rem; line-height: 1; }
 .ov-name   { font-size: 0.82rem; font-weight: 700; }
 .ov-hp-track { width: 70px; height: 6px; background: var(--surface3); border-radius: 3px; overflow: hidden; }
 .ov-hp     { font-size: 0.65rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
@@ -1961,13 +2016,17 @@ body[data-phase="item_select"] .team-sidebar { display: none; }
   /* Battle sides: active + bench side-by-side but smaller */
   .battle-side { padding: 6px 8px; gap: 8px; }
   .active-card { flex: 0 0 140px; }
-  .active-emoji { font-size: 2.4rem; }
+  .sprite-active .sprite { max-height: 86px; }
+  .sprite-active .sprite-fallback { font-size: 2.4rem; }
   .battle-bench {
     grid-template-columns: repeat(4, 1fr);
     grid-template-rows: 1fr;
   }
   .bench-card { padding: 5px 6px; }
-  .bench-emoji { font-size: 1.1rem; }
+  .sprite-bench { width: 30px; height: 30px; }
+  .sprite-bench .sprite-fallback { font-size: 1.1rem; }
+  .sprite-card { width: 64px; height: 64px; }
+  .sprite-card .sprite-fallback { font-size: 2.2rem; }
 
   /* Center panel stacks */
   .battle-center {
@@ -1993,7 +2052,8 @@ body[data-phase="item_select"] .team-sidebar { display: none; }
 
   /* Overlay cards → smaller */
   .ov-card { min-width: 80px; padding: 10px 10px; }
-  .ov-emoji { font-size: 1.8rem; }
+  .sprite-ov { width: 48px; height: 48px; }
+  .sprite-ov .sprite-fallback { font-size: 1.8rem; }
 
   /* Tooltips disabled on mobile (no hover) */
   .poke-tooltip { display: none !important; }

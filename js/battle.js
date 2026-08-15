@@ -325,6 +325,8 @@ function applyEffect(effect, atkWho, defWho, attacker, defender, dmg) {
       attacker.weakness    = defender.weakness;
       attacker.resistance  = defender.resistance;
       attacker.transformed = defender.name;
+      attacker.spriteId    = defender.id;      // look the part, too
+      attacker.emoji       = defender.emoji;
       addLog(`🎭 ${attacker.name} transformed into ${defender.emoji} ${defender.name} — copied its moves and typing!`);
       break;
     }

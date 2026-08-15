@@ -194,7 +194,7 @@ function buildCard(p, selected) {
     <span class="tier-badge" style="background:${ts.bg};color:${ts.color}">${p.tier}</span>
     <span class="card-cost">$${p.cost}</span>
   </div>
-  <span class="card-emoji">${p.emoji}</span>
+  ${window.spriteHtml(p, 'card')}
   <div class="card-name">${p.name}</div>
   <div class="card-types">${typePills}</div>
   <div class="card-divider"></div>
@@ -230,7 +230,7 @@ function renderSlots() {
       const ts = TIER_STYLE[p.tier];
       html += `
 <div class="team-slot filled" data-index="${i}">
-  <span class="slot-emoji">${p.emoji}</span>
+  ${window.spriteHtml(p, 'slot')}
   <div class="slot-info">
     <div class="slot-name">${p.name}</div>
     <div class="slot-meta">
@@ -402,7 +402,7 @@ function buildVsCard(p) {
     .join('');
 
   return `
-    <span class="vs-card-emoji">${p.emoji}</span>
+    ${window.spriteHtml(p, 'vs')}
     <div class="vs-card-info">
       <div class="vs-card-name">${p.name}</div>
       <div class="vs-card-meta">
@@ -687,7 +687,7 @@ function showCardTooltip(p, evt) {
 </div>`).join('');
 
   tt.innerHTML = `
-<div class="tt-title"><span>${p.emoji}</span><span>${p.name}</span></div>
+<div class="tt-title">${window.spriteHtml(p, 'tt')}<span>${p.name}</span></div>
 <div class="tt-attacks">${attacks}</div>
 <div class="tt-matchups">
   ${p.weakness   ? `<div class="tt-weak">⚠️ Weak to: ${p.weakness}</div>`   : ''}
