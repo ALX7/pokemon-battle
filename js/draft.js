@@ -61,11 +61,11 @@ const EFFECT_DESC = {
   recoil:    'User takes 25% recoil',
   heal:      'Heals user 30 HP',
   splash:    'Does nothing',
-  harden:    'Defensive stance',
-  transform: 'Copies opponent',
-  random:    'Random effect',
-  superfang: 'Halves foe HP',
-  flail:     'Power ↑ at low HP',
+  harden:    'Next hit taken −30 damage',
+  transform: 'Copies foe\'s moves & typing',
+  random:    'Fires a random Kanto move',
+  superfang: 'Halves foe\'s current HP',
+  flail:     'Bonus damage at low HP',
 };
 
 // ═══════════════════════════════════════════════════════════════

@@ -6,6 +6,11 @@
 
 const MAX_ENERGY = 5;
 
+// Hard cap on battle length. Healing moves (Softboiled, Amnesia) restore more
+// per turn than a weak attacker can remove, so some matchups never resolve on
+// their own. At the cap the winner is decided on total remaining HP.
+const MAX_TURNS = 50;
+
 // Status icons for log messages
 const STATUS_ICON = {
   burn:      '🔥',
@@ -18,11 +23,15 @@ const STATUS_ICON = {
 // ── Pokemon init ────────────────────────────────────────────────
 function initPokemon(p) {
   return Object.assign({}, p, {
+    // Deep-copy attacks so Transform can rewrite them without mutating the roster
+    attacks:      p.attacks.map(a => Object.assign({}, a)),
     currentHp:    p.hp,
     storedEnergy: 0,
     status:       null,
     statusTurns:  0,
     fainted:      false,
+    hardened:     false,   // Harden: reduces the next incoming hit
+    transformed:  null,    // Transform: name of the copied Pokemon
   });
 }
 
@@ -42,6 +51,7 @@ window.startBattle = function(playerTeam, aiTeam, playerItems, aiItems) {
       items:            playerItems.map(i => Object.assign({}, i, { used: false })),
       xAttackPending:   false,
       switchedThisTurn: false,
+      itemUsedThisTurn: false,
     },
     ai: {
       team:             aiTeam.map(initPokemon),
@@ -49,6 +59,7 @@ window.startBattle = function(playerTeam, aiTeam, playerItems, aiItems) {
       items:            aiItems.map(i => Object.assign({}, i, { used: false })),
       xAttackPending:   false,
       switchedThisTurn: false,
+      itemUsedThisTurn: false,
     },
     turn:                       1,
     activePlayer:               'player',
@@ -61,6 +72,17 @@ window.startBattle = function(playerTeam, aiTeam, playerItems, aiItems) {
     log:                        [],
   };
 
+  // Speed decides who moves first: faster lead Pokemon opens the battle.
+  const pLead = _state.player.team[0];
+  const aLead = _state.ai.team[0];
+  const tie   = pLead.speed === aLead.speed;
+  _state.activePlayer = tie
+    ? (Math.random() < 0.5 ? 'player' : 'ai')
+    : (pLead.speed > aLead.speed ? 'player' : 'ai');
+
+  // The turn counter ticks over each time control returns to whoever opened.
+  _state.firstPlayer = _state.activePlayer;
+
   window.BattleState = _state;
   _turnLogStart = 0;
 
@@ -68,8 +90,21 @@ window.startBattle = function(playerTeam, aiTeam, playerItems, aiItems) {
   document.getElementById('battle-screen').classList.add('active');
 
   addLog('⚔️ Battle begins!');
+  if (tie) {
+    addLog(`⚡ Speed tie (${pLead.speed}) — ${_state.activePlayer === 'player' ? 'you win' : 'AI wins'} the coin flip!`);
+  } else {
+    const fast = _state.activePlayer === 'player' ? pLead : aLead;
+    const slow = _state.activePlayer === 'player' ? aLead : pLead;
+    addLog(`⚡ ${fast.emoji} ${fast.name} (SPD ${fast.speed}) outspeeds ${slow.name} (SPD ${slow.speed}) — ${_state.activePlayer === 'player' ? 'you go' : 'AI goes'} first!`);
+  }
+
   startTurn();
   safeRender();
+
+  // If the AI won the speed roll it opens the battle.
+  if (_state.activePlayer === 'ai') {
+    setTimeout(() => window.aiTakeTurn?.(), window._battleDelay ?? 700);
+  }
 };
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -97,6 +132,7 @@ function startTurn() {
   const mon = active(who);
 
   side(who).switchedThisTurn = false;
+  side(who).itemUsedThisTurn = false;
 
   // 1. Energy +1
   mon.storedEnergy = clamp(mon.storedEnergy + 1, 0, MAX_ENERGY);
@@ -200,6 +236,14 @@ function executeAttack(who, attackIndex) {
       addLog(`⚔️ X Attack! +20 bonus damage`);
     }
 
+    // Harden: soaks the next incoming hit, then wears off
+    if (defender.hardened) {
+      const before = dmg;
+      dmg = Math.max(10, dmg - 30);
+      defender.hardened = false;
+      addLog(`🛡️ ${defender.name} braced itself! (−${before - dmg} damage)`);
+    }
+
     defender.currentHp = Math.max(0, defender.currentHp - dmg);
     window.dispatchEvent(new CustomEvent('b:hit', { detail: { who: opp } }));
     const badge = defender.weakness === attacker.type1 ? ' (super effective!)' : '';
@@ -260,13 +304,70 @@ function applyEffect(effect, atkWho, defWho, attacker, defender, dmg) {
       addLog(`💦 But nothing happened!`);
       break;
 
-    // Unimplemented special effects — no-op for now
-    case 'flail':
-    case 'transform':
-    case 'random':
-    case 'superfang':
     case 'harden':
+      attacker.hardened = true;
+      addLog(`🛡️ ${attacker.name} hardened! Next hit is reduced by 30.`);
       break;
+
+    case 'superfang': {
+      // Halves whatever the target has left — never a clean KO on its own.
+      const loss = Math.max(10, Math.floor(defender.currentHp / 2));
+      defender.currentHp = Math.max(1, defender.currentHp - loss);
+      addLog(`🦷 Super Fang halved ${defender.name}'s HP! (−${loss} → ${defender.currentHp})`);
+      window.dispatchEvent(new CustomEvent('b:hit', { detail: { who: defWho } }));
+      break;
+    }
+
+    case 'transform': {
+      attacker.attacks     = defender.attacks.map(a => Object.assign({}, a));
+      attacker.type1       = defender.type1;
+      attacker.type2       = defender.type2;
+      attacker.weakness    = defender.weakness;
+      attacker.resistance  = defender.resistance;
+      attacker.transformed = defender.name;
+      addLog(`🎭 ${attacker.name} transformed into ${defender.emoji} ${defender.name} — copied its moves and typing!`);
+      break;
+    }
+
+    case 'random': {
+      // Metronome: fires a random attack pulled from the whole Kanto roster.
+      const roster = window.KANTO_POKEMON || [];
+      const pool   = roster
+        .flatMap(p => p.attacks)
+        .filter(a => a.damage > 0 && a.effect !== 'random' && a.effect !== 'transform');
+      const roll = pool[Math.floor(Math.random() * pool.length)];
+      if (!roll) break;
+
+      let rollDmg = roll.damage;
+      if (defender.weakness   === attacker.type1) rollDmg *= 2;
+      if (defender.resistance === attacker.type1) rollDmg = Math.max(10, Math.floor(rollDmg * 0.5));
+
+      defender.currentHp = Math.max(0, defender.currentHp - rollDmg);
+      addLog(`🎲 Metronome became ${roll.name}! ${defender.name} −${rollDmg} HP`);
+      window.dispatchEvent(new CustomEvent('b:hit', { detail: { who: defWho } }));
+
+      // Metronome inherits the rolled move's status effect, but never recurses.
+      if (roll.effect && !defender.status && !defender.fainted &&
+          ['burn', 'paralysis', 'sleep', 'poison'].includes(roll.effect) &&
+          Math.random() < 0.30) {
+        defender.status = roll.effect;
+        addLog(`${STATUS_ICON[roll.effect]} ${defender.name} is now ${roll.effect}!`);
+        window.dispatchEvent(new CustomEvent('b:status', { detail: { who: defWho } }));
+      }
+      break;
+    }
+
+    case 'flail': {
+      // Weaker the user, harder it hits — up to +60 at critical HP.
+      const missing = 1 - (attacker.currentHp / attacker.hp);
+      const bonus   = Math.floor(missing * 60);
+      if (bonus > 0) {
+        defender.currentHp = Math.max(0, defender.currentHp - bonus);
+        addLog(`💢 ${attacker.name} flailed desperately! (+${bonus} damage)`);
+        window.dispatchEvent(new CustomEvent('b:hit', { detail: { who: defWho } }));
+      }
+      break;
+    }
   }
 }
 
@@ -337,6 +438,12 @@ function executeItem(who, itemIndex, targetIndex) {
   const item = s.items[itemIndex];
   if (!item || item.used) return false;
 
+  // One item per turn (Action Phase).
+  if (s.itemUsedThisTurn) {
+    if (who === 'player') addLog('You already used an item this turn!');
+    return false;
+  }
+
   const label = who === 'player' ? 'You' : 'AI';
 
   switch (item.id) {
@@ -383,21 +490,27 @@ function executeItem(who, itemIndex, targetIndex) {
       break;
   }
 
-  item.used = true;
+  item.used            = true;
+  s.itemUsedThisTurn   = true;
   window.dispatchEvent(new CustomEvent('b:item', { detail: { who, idx: itemIndex } }));
   return true;
 }
 
 // resolveTarget: returns the Pokemon to target.
-//   faintedOnly = true  → pick first fainted (for Revive)
-//   faintedOnly = false → pick first living (for Potion / Full Heal)
-//   If targetIndex is provided, use that instead.
+//   faintedOnly = true  → Revive: a fainted Pokemon
+//   faintedOnly = false → Potion / Full Heal: a living Pokemon
+// An explicit targetIndex is validated against that rule; without one we fall
+// back to the ACTIVE Pokemon, which is what the user means ~always.
 function resolveTarget(s, targetIndex, faintedOnly) {
-  if (targetIndex !== null) {
+  if (targetIndex !== null && targetIndex !== undefined) {
     const t = s.team[targetIndex];
-    return t ? t : null;
+    if (!t) return null;
+    return t.fainted === faintedOnly ? t : null;
   }
   if (faintedOnly) return s.team.find(p => p.fainted) || null;
+
+  const act = s.team[s.active];
+  if (act && !act.fainted) return act;
   return s.team.find(p => !p.fainted) || null;
 }
 
@@ -425,14 +538,21 @@ function checkFaint(who) {
 
   _state.phase = 'faint_replace';
 
-  if (who === 'ai') {
-    // AI auto-picks: healthiest non-fainted bench Pokemon
+  // The AI always auto-picks; the player's side auto-picks too while Auto
+  // Battle is driving, otherwise the loop would stall on the overlay.
+  if (who === 'ai' || window._autoBattle) {
     const bestIdx = s.team
       .map((p, i) => ({ p, i }))
       .filter(({ p, i }) => !p.fainted && i !== s.active)
       .sort((a, b) => b.p.currentHp - a.p.currentHp)[0]?.i;
 
-    if (bestIdx !== undefined) performSwitch('ai', bestIdx, true);
+    // An auto-replacement is instantaneous, so the acting side simply carries
+    // on with its turn. Advancing here would hand them a second turn, because
+    // aiTakeTurn() advances again once it finishes.
+    if (bestIdx !== undefined) {
+      _state.faintReplacePendingAdvance = false;
+      performSwitch(who, bestIdx, true);
+    }
 
   } else {
     // Player must pick — set flag if this happened during AI's turn
@@ -453,8 +573,19 @@ window.endTurn = function() {
 };
 
 function advanceTurn() {
+  // Paralysis costs the paralyzed side one turn, then wears off — whether or
+  // not they actually tried to attack.
+  const outgoing = active(_state.activePlayer);
+  if (outgoing.status === 'paralysis') {
+    outgoing.status = null;
+    addLog(`⚡ ${outgoing.name} shook off the paralysis.`);
+  }
+
   const next = opponent(_state.activePlayer);
-  if (next === 'player') _state.turn++;
+  if (next === _state.firstPlayer) {
+    _state.turn++;
+    if (_state.turn > MAX_TURNS) { triggerTimeLimit(); return; }
+  }
 
   // Save last turn log for replay
   window._lastTurnLog = _state.log.slice(_turnLogStart);
@@ -474,6 +605,28 @@ function advanceTurn() {
 // ═══════════════════════════════════════════════════════════════
 // GAME OVER
 // ═══════════════════════════════════════════════════════════════
+
+// Time limit reached — decide on total HP left, then on fewest fainted.
+function triggerTimeLimit() {
+  const total   = who => side(who).team.reduce((n, p) => n + p.currentHp, 0);
+  const standing = who => side(who).team.filter(p => !p.fainted).length;
+
+  const pHp = total('player'), aHp = total('ai');
+  addLog(`⏱️ Turn limit reached! Judging on remaining HP…`);
+  addLog(`📊 You: ${pHp} HP across ${standing('player')} Pokemon · AI: ${aHp} HP across ${standing('ai')}`);
+
+  let winner;
+  if (pHp !== aHp)                              winner = pHp > aHp ? 'player' : 'ai';
+  else if (standing('player') !== standing('ai')) winner = standing('player') > standing('ai') ? 'player' : 'ai';
+  else                                          winner = 'draw';
+
+  _state.phase   = 'game_over';
+  _state.winner  = winner;
+  _state.timedOut = true;
+  addLog(winner === 'draw' ? '🤝 A perfect draw!'
+       : winner === 'player' ? '🏆 You win on HP!' : '💀 AI wins on HP.');
+  safeRender();
+}
 
 function triggerGameOver(winner) {
   _state.phase  = 'game_over';

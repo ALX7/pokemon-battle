@@ -25,25 +25,42 @@ window.aiTakeTurn = async function() {
 
   const mon = () => s.team[s.active];
 
-  // ── 1. Full Heal if status-affected ──────────────────────────
-  if (mon().status) {
-    const idx = s.items.findIndex(i => i.id === 'fullheal' && !i.used);
-    if (idx >= 0) {
-      b.executeItem(who, idx, null);
-      b.render();
-      await delay(900);
+  // ── 1. Items — only ONE may be used per turn, so pick the most urgent ──
+  const has = id => s.items.findIndex(i => i.id === id && !i.used);
+  const hpFrac = () => mon().currentHp / mon().hp;
+
+  let itemIdx = -1;
+  let itemTarget = null;
+
+  if (mon().status && has('fullheal') >= 0) {
+    // Status on the active Pokemon is the most pressing problem.
+    itemIdx = has('fullheal');
+    itemTarget = s.active;
+
+  } else if (hpFrac() < 0.4 && has('potion') >= 0) {
+    itemIdx = has('potion');
+    itemTarget = s.active;
+
+  } else if (has('revive') >= 0 && s.team.some(p => p.fainted)) {
+    // Only worth it once the bench is genuinely thin.
+    const healthy = s.team.filter((p, i) => !p.fainted && i !== s.active).length;
+    if (healthy <= 1) {
+      itemIdx = has('revive');
+      itemTarget = s.team.findIndex(p => p.fainted);
     }
   }
-  if (state.phase !== 'battle') return;
 
-  // ── 2. Potion if HP < 40% ────────────────────────────────────
-  if (mon().currentHp / mon().hp < 0.4) {
-    const idx = s.items.findIndex(i => i.id === 'potion' && !i.used);
-    if (idx >= 0) {
-      b.executeItem(who, idx, null);
-      b.render();
-      await delay(900);
-    }
+  // X Attack is pure upside when a real attack is already affordable.
+  if (itemIdx < 0 && has('xattack') >= 0) {
+    const affordable = mon().attacks.some(a =>
+      mon().storedEnergy >= a.energyCost && a.damage > 0);
+    if (affordable && hpFrac() > 0.3) itemIdx = has('xattack');
+  }
+
+  if (itemIdx >= 0) {
+    b.executeItem(who, itemIdx, itemTarget);
+    b.render();
+    await delay(900);
   }
   if (state.phase !== 'battle') return;
 
@@ -62,12 +79,24 @@ window.aiTakeTurn = async function() {
   }
   if (state.phase !== 'battle') return;
 
-  // ── 4. Attack — highest-damage affordable move ────────────────
-  const current = mon();
+  // ── 4. Attack — best affordable move, scored after type matchup ──────
+  const current  = mon();
+  const foe      = state[who === 'player' ? 'ai' : 'player'];
+  const defender = foe.team[foe.active];
+
+  const effective = a => {
+    let d = a.damage;
+    if (defender.weakness   === current.type1) d *= 2;
+    if (defender.resistance === current.type1) d = Math.max(10, Math.floor(d * 0.5));
+    // A status move with no damage still has some value.
+    if (d === 0 && a.effect) d = 15;
+    return d;
+  };
+
   const best = current.attacks
     .map((a, i) => ({ a, i }))
     .filter(({ a }) => current.storedEnergy >= a.energyCost)
-    .sort((x, y) => y.a.damage - x.a.damage)[0];
+    .sort((x, y) => effective(y.a) - effective(x.a))[0];
 
   if (best) {
     b.executeAttack(who, best.i);

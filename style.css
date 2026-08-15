@@ -46,13 +46,13 @@ body {
   color: var(--text);
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   line-height: 1.4;
-  min-height: 100vh;
+  min-height: 100dvh;
   overflow: hidden;
 }
 
 /* ── Screens ─────────────────────────────────────────────────── */
 .screen { display: none; }
-.screen.active { display: flex; flex-direction: column; height: 100vh; }
+.screen.active { display: flex; flex-direction: column; height: 100dvh; }
 
 /* ══════════════════════════════════════════════════════════════
    DRAFT HEADER
@@ -1079,7 +1079,7 @@ body[data-phase="item_select"] .team-sidebar { display: none; }
 .battle-layout {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -1328,6 +1328,8 @@ body[data-phase="item_select"] .team-sidebar { display: none; }
   line-height: 1.5;
 }
 
+.turn-max { color: var(--text-dim); font-size: 0.66rem; }
+
 .turn-label { display: block; font-weight: 700; }
 .turn-player { color: var(--gold); }
 .turn-ai     { color: var(--red); }
@@ -1529,6 +1531,32 @@ body[data-phase="item_select"] .team-sidebar { display: none; }
 .ov-status { font-size: 0.6rem; color: var(--text-muted); }
 .ov-empty  { color: var(--text-muted); font-style: italic; }
 
+/* ── Item target picker ─────────────────────────────────────── */
+.ov-card { position: relative; }
+
+.ov-active-tag {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--gold);
+  color: #000;
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.ov-preview {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+  min-height: 1em;
+}
+
 .ov-close {
   align-self: center;
   background: none;
@@ -1548,7 +1576,7 @@ body[data-phase="item_select"] .team-sidebar { display: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100vh;
+  height: 100dvh;
   background: var(--bg);
 }
 

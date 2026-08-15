@@ -7,6 +7,10 @@
 // ── UI state ────────────────────────────────────────────────────
 let _switchOverlayOpen = false;
 let _replayOpen        = false;
+let _itemPicker        = null;   // { idx, id } → choosing a target for an item
+
+// Items that need the player to pick which Pokemon they apply to.
+const TARGETED_ITEMS = { potion: true, fullheal: true, revive: true };
 
 // Animation state — set by battle events, consumed after each render
 let _shakeWho     = null;   // 'player'|'ai'  → active card shakes
@@ -62,6 +66,7 @@ window.renderBattle = function() {
   screen.innerHTML =
     buildToolbar() +
     buildLayout(state) +
+    (_itemPicker  ? buildItemPicker(state)    : '') +
     (needsOverlay ? buildSwitchOverlay(state) : '') +
     (needsReplay  ? buildReplayModal()        : '');
 
@@ -185,7 +190,7 @@ function buildCenter(state) {
   </div>
   <div class="battle-controls">
     <div class="turn-info" aria-live="polite">
-      Turn <strong>${state.turn}</strong>
+      Turn <strong>${state.turn}</strong><span class="turn-max">/50</span>
       <span class="turn-label ${turnClass}">${turnLabel}</span>
     </div>
     <button id="end-turn-btn" class="end-turn-btn" ${isMyTurn ? '' : 'disabled'}
@@ -219,12 +224,14 @@ function buildActions(state) {
   }).join('');
 
   const itemBtns = s.items.map((item, i) => {
-    const canUse  = myTurn && !item.used;
+    const canUse  = myTurn && !item.used && !s.itemUsedThisTurn;
     const isFresh = _itemUsed && _itemUsed.who === 'player' && _itemUsed.idx === i;
+    const why     = item.used ? ', used'
+                  : s.itemUsedThisTurn ? ', already used an item this turn' : '';
     return `
 <button class="item-btn ${item.used ? 'item-used' : canUse ? 'item-on' : 'item-off'}${isFresh ? ' item-cross' : ''}"
         data-item="${i}" ${canUse ? '' : 'disabled'}
-        aria-label="${item.name}${item.used ? ', used' : ''}">
+        aria-label="${item.name}${why}">
   ${item.emoji} <span class="item-lbl">${item.name}</span>
 </button>`;
   }).join('');
@@ -296,6 +303,60 @@ function buildSwitchOverlay(state) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ITEM TARGET PICKER
+// ═══════════════════════════════════════════════════════════════
+function itemTargets(state, id) {
+  const team = state.player.team;
+  const tag  = (p, i) => ({ p, i });
+
+  if (id === 'revive')   return team.map(tag).filter(({ p }) => p.fainted);
+  if (id === 'fullheal') return team.map(tag).filter(({ p }) => !p.fainted && p.status);
+  return team.map(tag).filter(({ p }) => !p.fainted && p.currentHp < p.hp);
+}
+
+const ITEM_PROMPT = {
+  potion:   { icon: '🧪', title: 'Potion — heal which Pokemon?',      empty: 'Everyone is already at full HP.' },
+  fullheal: { icon: '✨', title: 'Full Heal — cure which Pokemon?',   empty: 'Nobody has a status condition.'   },
+  revive:   { icon: '💫', title: 'Revive — bring back which Pokemon?', empty: 'No fainted Pokemon to revive.'   },
+};
+
+function buildItemPicker(state) {
+  const { id }   = _itemPicker;
+  const prompt   = ITEM_PROMPT[id];
+  const targets  = itemTargets(state, id);
+  const activeIx = state.player.active;
+
+  const cards = targets.map(({ p, i }) => {
+    const hpPct   = p.currentHp / p.hp;
+    const preview = id === 'potion'
+      ? `→ ${Math.min(p.hp, p.currentHp + 40)}/${p.hp}`
+      : id === 'revive'
+        ? `→ ${Math.floor(p.hp * 0.5)}/${p.hp}`
+        : STATUS_LABEL[p.status] || '';
+
+    return `
+<div class="ov-card" data-item-target="${i}" tabindex="0" role="button"
+     aria-label="${p.name}, ${p.currentHp} of ${p.hp} HP${i === activeIx ? ', active' : ''}">
+  ${i === activeIx ? '<div class="ov-active-tag">ACTIVE</div>' : ''}
+  <div class="ov-emoji" aria-hidden="true">${p.fainted ? '💀' : p.emoji}</div>
+  <div class="ov-name">${p.name}</div>
+  <div class="ov-hp-track"><div style="width:${(hpPct*100).toFixed(0)}%;background:${hpColor(hpPct)};height:100%;border-radius:3px"></div></div>
+  <div class="ov-hp">${p.currentHp}/${p.hp}</div>
+  <div class="ov-preview">${preview}</div>
+</div>`;
+  }).join('') || `<p class="ov-empty">${prompt.empty}</p>`;
+
+  return `
+<div class="battle-overlay" id="item-picker" role="dialog" aria-modal="true" aria-label="${prompt.title}">
+  <div class="ov-panel">
+    <div class="ov-title">${prompt.icon} ${prompt.title}</div>
+    <div class="ov-cards">${cards}</div>
+    <button class="ov-close" id="item-picker-close" aria-label="Cancel item">✕ Cancel</button>
+  </div>
+</div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // REPLAY MODAL
 // ═══════════════════════════════════════════════════════════════
 function buildReplayModal() {
@@ -317,25 +378,33 @@ function buildReplayModal() {
 // GAME OVER
 // ═══════════════════════════════════════════════════════════════
 function buildGameOver(state) {
+  const draw        = state.winner === 'draw';
   const won         = state.winner === 'player';
   const playerAlive = state.player.team.filter(p => !p.fainted).length;
   const aiAlive     = state.ai.team.filter(p => !p.fainted).length;
   const recap       = state.log.slice(-8).map(l => `<div class="log-line">${l}</div>`).join('');
 
+  const icon  = draw ? '🤝' : won ? '🏆' : '😞';
+  const title = draw ? 'Draw'   : won ? 'Victory!' : 'Defeated';
+  const sub   = state.timedOut
+    ? (draw ? 'Turn limit reached — dead even on HP.'
+            : `Turn limit reached — ${won ? 'you' : 'the AI'} won on remaining HP.`)
+    : (won ? 'You won the battle!' : 'AI wins this round!');
+
   return `
 <div class="game-over-wrap" role="main">
   <div class="go-card" role="region" aria-label="Game over">
-    <div class="go-icon" aria-hidden="true">${won ? '🏆' : '😞'}</div>
-    <div class="go-title">${won ? 'Victory!' : 'Defeated'}</div>
-    <div class="go-sub">${won ? 'You won the battle!' : 'AI wins this round!'}</div>
+    <div class="go-icon" aria-hidden="true">${icon}</div>
+    <div class="go-title">${title}</div>
+    <div class="go-sub">${sub}</div>
     <div class="go-stats">
       <div class="go-stat">
         <span class="go-stat-lbl">Your survivors</span>
-        <span class="go-stat-val" style="color:${won?'var(--green)':'var(--red)'}">${playerAlive}/5</span>
+        <span class="go-stat-val" style="color:${draw?'var(--text)':won?'var(--green)':'var(--red)'}">${playerAlive}/5</span>
       </div>
       <div class="go-stat">
         <span class="go-stat-lbl">AI survivors</span>
-        <span class="go-stat-val" style="color:${!won?'var(--green)':'var(--red)'}">${aiAlive}/5</span>
+        <span class="go-stat-val" style="color:${draw?'var(--text)':!won?'var(--green)':'var(--red)'}">${aiAlive}/5</span>
       </div>
     </div>
     <div class="go-log" role="log">${recap}</div>
@@ -353,9 +422,42 @@ function wireEvents(state) {
     btn.addEventListener('click', () => window.useAttack(+btn.dataset.atk));
   });
 
-  // Item buttons
+  // Item buttons — targeted items open a picker, the rest apply immediately
   document.querySelectorAll('.item-btn:not([disabled])').forEach(btn => {
-    btn.addEventListener('click', () => window.useItem(+btn.dataset.item, null));
+    btn.addEventListener('click', () => {
+      const idx = +btn.dataset.item;
+      const id  = state.player.items[idx]?.id;
+
+      if (!TARGETED_ITEMS[id]) { window.useItem(idx, null); return; }
+
+      if (itemTargets(state, id).length === 0) {
+        window._b?.addLog(ITEM_PROMPT[id].empty);
+        window.renderBattle();
+        return;
+      }
+      _itemPicker = { idx, id };
+      window.renderBattle();
+    });
+  });
+
+  // Item picker: choose target
+  document.querySelectorAll('[data-item-target]').forEach(card => {
+    const activate = () => {
+      const target = +card.dataset.itemTarget;
+      const picker = _itemPicker;
+      _itemPicker = null;
+      if (picker) window.useItem(picker.idx, target);
+      else window.renderBattle();
+    };
+    card.addEventListener('click', activate);
+    card.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
+    });
+  });
+
+  document.getElementById('item-picker-close')?.addEventListener('click', () => {
+    _itemPicker = null;
+    window.renderBattle();
   });
 
   // Switch open
@@ -428,6 +530,7 @@ function escHandler(e) {
   let changed = false;
   if (_switchOverlayOpen) { _switchOverlayOpen = false; changed = true; }
   if (_replayOpen)        { _replayOpen        = false; changed = true; }
+  if (_itemPicker)        { _itemPicker        = null;  changed = true; }
   if (changed) {
     document.removeEventListener('keydown', escHandler);
     window.renderBattle();
